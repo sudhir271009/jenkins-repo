@@ -8,7 +8,7 @@ pipeline {
     environment {
         IMAGE = "shiv2020/adidas:${IMAGE_TAG}"
         APP   = "pipeline-nginx"
-        PORT  = "30085"
+        PORT  = "30086"
     }
 
     stages {
