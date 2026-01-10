@@ -3,7 +3,7 @@ parameters {
 }
 
 pipeline {
-    agent { label 'jenkin-node1' }
+    agent { label 'node1' }
 
     environment {
         IMAGE = "shiv2020/adidas:${IMAGE_TAG}"
