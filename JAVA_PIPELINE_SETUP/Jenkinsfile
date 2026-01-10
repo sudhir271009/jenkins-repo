@@ -1,0 +1,77 @@
+pipeline {
+    agent { label 'ss' }
+
+    environment {
+        REPO_URL = "https://github.com/akblazeacademy/TEACH_JENKINS.git"
+        CREDS    = "github-creds"
+        BUILD_JAR = "jenkins-demo-1.0-build-${BUILD_NUMBER}.jar"
+    }
+
+    stages {
+
+        stage('Checkout') {
+            steps {
+                git branch: 'main',
+                    credentialsId: env.CREDS,
+                    url: env.REPO_URL
+            }
+        }
+
+        stage('Build Java JAR') {
+            steps {
+                dir('JAVA_PIPELINE_SETUP') {
+                    sh 'mvn clean package'
+                }
+            }
+        }
+
+        stage('Rename JAR with Build Number') {
+            steps {
+                dir('JAVA_PIPELINE_SETUP') {
+                    sh '''
+                      mv target/jenkins-demo-1.0.jar target/${BUILD_JAR}
+                    '''
+                }
+            }
+        }
+
+        stage('Verify JAR') {
+            steps {
+                dir('JAVA_PIPELINE_SETUP') {
+                    sh '''
+                      ls -l target
+                      java -jar target/${BUILD_JAR}
+                    '''
+                }
+            }
+        }
+
+        stage('Push JAR to GitHub') {
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: env.CREDS,
+                    usernameVariable: 'GIT_USER',
+                    passwordVariable: 'GIT_TOKEN'
+                )]) {
+                    dir('JAVA_PIPELINE_SETUP') {
+                        sh '''
+                          git config user.email "jenkins@ci.com"
+                          git config user.name "jenkins-bot"
+
+                          git add target/${BUILD_JAR}
+                          git commit -m "Build ${BUILD_NUMBER}: Added JAR" || true
+
+                          git push https://${GIT_USER}:${GIT_TOKEN}@github.com/akblazeacademy/TEACH_JENKINS.git
+                        '''
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "✅ Build #${BUILD_NUMBER} completed successfully"
+        }
+    }
+}

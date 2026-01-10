@@ -1,0 +1,146 @@
+pipeline {
+    agent { label 'ss' }
+
+    parameters {
+
+        string(
+            name: 'ARM_CLIENT_ID',
+            description: 'Azure Service Principal Client ID (App ID)'
+        )
+
+        password(
+            name: 'ARM_CLIENT_SECRET',
+            description: 'Azure Service Principal Client Secret'
+        )
+
+        string(
+            name: 'ARM_TENANT_ID',
+            description: 'Azure Tenant ID'
+        )
+
+        string(
+            name: 'ARM_SUBSCRIPTION_ID',
+            description: 'Azure Subscription ID'
+        )
+
+        choice(
+            name: 'ACTION',
+            choices: ['plan', 'apply'],
+            description: 'Terraform action'
+        )
+
+        choice(
+            name: 'STATE_CONTAINER',
+            choices: ['dev', 'prod', 'qualityassurance'],
+            description: 'Terraform backend state container'
+        )
+
+        string(name: 'WORKSPACE', description: 'Terraform workspace name')
+        string(name: 'RG_NAME', description: 'Resource Group name')
+        string(name: 'LOCATION', description: 'Azure region')
+        string(name: 'VNET_NAME', description: 'Virtual Network name')
+        string(name: 'VNET_CIDR', description: 'VNet CIDR')
+        string(name: 'SUBNET_NAME', description: 'Subnet name')
+        string(name: 'SUBNET_CIDR', description: 'Subnet CIDR')
+    }
+
+    environment {
+        ARM_CLIENT_ID         = "${params.ARM_CLIENT_ID}"
+        ARM_CLIENT_SECRET     = "${params.ARM_CLIENT_SECRET}"
+        ARM_TENANT_ID         = "${params.ARM_TENANT_ID}"
+        ARM_SUBSCRIPTION_ID   = "${params.ARM_SUBSCRIPTION_ID}"
+
+        // Force Service Principal auth (NO Azure CLI)
+        ARM_USE_AZURECLI_AUTH = "false"
+    }
+
+    stages {
+
+        stage('Validate Inputs') {
+            steps {
+                sh '''
+                if [ -z "$ARM_CLIENT_ID" ] || \
+                   [ -z "$ARM_CLIENT_SECRET" ] || \
+                   [ -z "$ARM_TENANT_ID" ] || \
+                   [ -z "$ARM_SUBSCRIPTION_ID" ]; then
+                   echo "❌ Missing Azure Service Principal credentials"
+                   exit 1
+                fi
+                '''
+            }
+        }
+
+        stage('Checkout') {
+            steps {
+                git url: "${myrepo}", branch: 'main'
+            }
+        }
+
+        stage('Terraform Init') {
+            steps {
+                sh '''
+                cd TERRAFORM
+
+                terraform init \
+                  -reconfigure \
+                  -backend-config="storage_account_name=ungabungablaze123" \
+                  -backend-config="container_name=${STATE_CONTAINER}" \
+                  -backend-config="key=${WORKSPACE}.tfstate" \
+                  -backend-config="resource_group_name=myprimary"
+                '''
+            }
+        }
+
+        stage('Workspace') {
+            steps {
+                sh '''
+                cd TERRAFORM
+                terraform workspace select ${WORKSPACE} \
+                || terraform workspace new ${WORKSPACE}
+                '''
+            }
+        }
+
+        stage('Terraform Plan') {
+            steps {
+                sh '''
+                cd TERRAFORM
+                terraform plan \
+                  -var="rg_name=${RG_NAME}" \
+                  -var="location=${LOCATION}" \
+                  -var="vnet_name=${VNET_NAME}" \
+                  -var="vnet_cidr=${VNET_CIDR}" \
+                  -var="subnet_name=${SUBNET_NAME}" \
+                  -var="subnet_cidr=${SUBNET_CIDR}"
+                '''
+            }
+        }
+
+        stage('Terraform Apply') {
+            when {
+                expression { params.ACTION == 'apply' }
+            }
+            steps {
+                sh '''
+                cd TERRAFORM
+                terraform apply -auto-approve \
+                  -var="rg_name=${RG_NAME}" \
+                  -var="location=${LOCATION}" \
+                  -var="vnet_name=${VNET_NAME}" \
+                  -var="vnet_cidr=${VNET_CIDR}" \
+                  -var="subnet_name=${SUBNET_NAME}" \
+                  -var="subnet_cidr=${SUBNET_CIDR}"
+                '''
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "✅ Terraform ${params.ACTION} completed successfully"
+        }
+        failure {
+            echo "❌ Terraform failed"
+        }
+    }
+}
