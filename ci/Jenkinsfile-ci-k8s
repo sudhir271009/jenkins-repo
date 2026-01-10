@@ -50,7 +50,7 @@ pipeline {
 
     stage('Trigger CD Job') {
       steps {
-        build job: 'cd-k8s-deploy',
+        build job: 'cd-k8s-deploy-with-serviceaccout',
               wait: false,
               parameters: [
                 string(name: 'IMAGE_TAG', value: "${IMAGE_TAG}")
