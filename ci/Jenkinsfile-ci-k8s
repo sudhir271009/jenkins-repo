@@ -1,0 +1,71 @@
+pipeline {
+  agent { label 'node1' }
+
+  environment {
+    DOCKERHUB_REPO = "shiv2020/testrepo1"
+    IMAGE_TAG = "${BUILD_NUMBER}"
+  }
+
+  stages {
+
+    stage('Checkout Code') {
+      steps {
+        git branch: 'main',
+            url: 'https://github.com/sudhir271009/jenkins-repo.git'
+      }
+    }
+
+    stage('Build Docker Image') {
+      steps {
+        sh '''
+          cd dockerfile+index.html
+          docker build -t ${DOCKERHUB_REPO}:${IMAGE_TAG} .
+        '''
+      }
+    }
+
+    stage('Login to DockerHub') {
+      steps {
+        withCredentials([
+          usernamePassword(
+            credentialsId: 'dockerhub-akblaze',
+            usernameVariable: 'DH_USER',
+            passwordVariable: 'DH_TOKEN'
+          )
+        ]) {
+          sh 'echo "$DH_TOKEN" | docker login -u "$DH_USER" --password-stdin'
+        }
+      }
+    }
+
+    stage('Push Image') {
+      steps {
+        sh '''
+          docker push ${DOCKERHUB_REPO}:${IMAGE_TAG}
+          docker tag ${DOCKERHUB_REPO}:${IMAGE_TAG} ${DOCKERHUB_REPO}:latest
+          docker push ${DOCKERHUB_REPO}:latest
+        '''
+      }
+    }
+
+    stage('Trigger CD Job') {
+      steps {
+        build job: 'cd-k8s-deploy',
+              wait: false,
+              parameters: [
+                string(name: 'IMAGE_TAG', value: "${IMAGE_TAG}")
+              ]
+      }
+    }
+  }
+
+  post {
+    success {
+      echo "✅ CI completed. Image pushed: ${DOCKERHUB_REPO}:${IMAGE_TAG}"
+    }
+    failure {
+      echo "❌ CI failed"
+    }
+  }
+}
+
