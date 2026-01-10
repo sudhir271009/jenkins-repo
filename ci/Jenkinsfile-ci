@@ -1,5 +1,5 @@
 pipeline {
-    agent { label 'jenkin-node1' }
+    agent { label 'node1' }
 
     environment {
         DOCKERHUB_REPO = "shiv2020/adidas"
