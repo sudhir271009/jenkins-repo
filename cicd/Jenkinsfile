@@ -1,0 +1,85 @@
+pipeline {
+    agent none
+
+    parameters {
+        choice(name: 'ENV', choices: ['dev', 'qa', 'prod'], description: 'Select environment')
+    }
+
+    environment {
+        IMAGE_NAME = "shiv2020/java-app"
+        IMAGE_TAG  = "${BUILD_NUMBER}"
+        GIT_CREDS  = "github-token"
+    }
+
+    stages {
+
+        stage('Set Environment Config') {
+            agent { label 'node1 || node2' }
+            steps {
+                script {
+                    if (params.ENV == 'dev') {
+                        env.GIT_BRANCH = 'develop'
+                        env.K8S_NS = 'dev'
+                        env.K8S_TOKEN = 'k8s-dev-token'
+                    } else if (params.ENV == 'qa') {
+                        env.GIT_BRANCH = 'qa'
+                        env.K8S_NS = 'qa'
+                        env.K8S_TOKEN = 'k8s-qa-token'
+                    } else {
+                        env.GIT_BRANCH = 'main'
+                        env.K8S_NS = 'prod'
+                        env.K8S_TOKEN = 'k8s-prod-token'
+                    }
+                }
+            }
+        }
+
+        stage('Checkout Code') {
+            agent { label 'node1 || node2' }
+            steps {
+                git branch: "${GIT_BRANCH}",
+                    credentialsId: "${GIT_CREDS}",
+                    url: 'https://github.com/sudhir271009/jenkins-repo.git'
+            }
+        }
+
+        stage('Build with Maven') {
+            agent { label 'node1 || node2' }
+            steps {
+                sh 'cd cicd && mvn clean package'
+            }
+        }
+
+        stage('Build & Push Docker Image') {
+            agent { label 'docker' }
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'dockerhub-creds',
+                    usernameVariable: 'DOCKER_USER',
+                    passwordVariable: 'DOCKER_PASS'
+                )]) {
+                    sh '''
+                      cd cicd
+                      docker login -u $DOCKER_USER -p $DOCKER_PASS
+                      docker build -t $IMAGE_NAME:$IMAGE_TAG .
+                      docker push $IMAGE_NAME:$IMAGE_TAG
+                    '''
+                }
+            }
+        }
+
+        stage('Deploy to Kubernetes') {
+            agent { label 'node1 || node2' }
+            steps {
+                withCredentials([string(credentialsId: "${K8S_TOKEN}", variable: 'TOKEN')]) {
+                    sh """
+                      cd cicd
+                      sed "s/IMAGE_TAG/$IMAGE_TAG/g" k8s/deployment-${ENV}.yaml > deploy.yaml
+                      kubectl --token=$TOKEN -n $K8S_NS apply -f deploy.yaml
+                    """
+                }
+            }
+        }
+    }
+}
+
