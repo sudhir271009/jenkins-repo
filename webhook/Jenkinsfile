@@ -1,5 +1,5 @@
 pipeline {
-    agent { label 'node1 || node2' }
+    agent { label ' node1 || node2' }
 
     environment {
         IMAGE_NAME = "webhook-nginx:${BUILD_NUMBER}"
@@ -20,16 +20,19 @@ pipeline {
 
         stage('Build Docker Image') {
             steps {
-                sh '''
-                  docker build -t $IMAGE_NAME .
-                '''
+                dir('webhook') {
+                    sh '''
+                      docker build -t $IMAGE_NAME .
+                    '''
+                }
             }
         }
 
         stage('Run Container') {
             steps {
                 sh '''
-                  docker run -d -p 8085:80 $IMAGE_NAME || true
+                  docker rm -f webhook-nginx || true
+                  docker run -d --name webhook-nginx -p 8085:80 $IMAGE_NAME
                 '''
             }
         }
