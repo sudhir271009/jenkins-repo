@@ -6,7 +6,11 @@ pipeline {
     }
 
     parameters {
-        choice(name: 'ENV', choices: ['dev', 'qa', 'prod'], description: 'Select environment')
+        choice(
+            name: 'ENV',
+            choices: ['dev', 'qa', 'prod'],
+            description: 'Select environment'
+        )
     }
 
     environment {
@@ -58,7 +62,7 @@ pipeline {
             agent { label 'node1 || node2' }
             steps {
                 withCredentials([usernamePassword(
-                    credentialsId: 'dockerhub-creds',
+                    credentialsId: 'dockerhub-akblaze',
                     usernameVariable: 'DOCKER_USER',
                     passwordVariable: 'DOCKER_PASS'
                 )]) {
