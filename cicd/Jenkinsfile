@@ -1,6 +1,10 @@
 pipeline {
     agent none
 
+    options {
+        skipDefaultCheckout(true)
+    }
+
     parameters {
         choice(name: 'ENV', choices: ['dev', 'qa', 'prod'], description: 'Select environment')
     }
