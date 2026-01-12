@@ -51,7 +51,7 @@ pipeline {
         }
 
         stage('Build & Push Docker Image') {
-            agent { label 'docker' }
+            agent { label 'node1 || node2' }
             steps {
                 withCredentials([usernamePassword(
                     credentialsId: 'dockerhub-creds',
@@ -82,4 +82,3 @@ pipeline {
         }
     }
 }
-
